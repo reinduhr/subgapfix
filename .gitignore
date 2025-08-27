@@ -1,0 +1,6 @@
+.venv/
+data/
+
+src/subgapfix.egg-info/
+dist/
+pyproject.toml
