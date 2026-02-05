@@ -60,7 +60,7 @@ How are you?
 Run:
 
 ```bash
-python subgapfix.py input.srt -o fixed.srt
+subgapfix input.srt -o easyreading.srt
 ```
 
 Output:
