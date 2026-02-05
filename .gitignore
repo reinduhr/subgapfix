@@ -1,6 +1,8 @@
 .venv/
 data/
+dist/
 
 src/subgapfix.egg-info/
-dist/
+**/__pycache__/
+
 pyproject.toml
