@@ -62,7 +62,7 @@ subgapfix input.srt --extend-sub-start 0.8 --extend-sub-end 3.0 --min-gap 1.5 --
 1. Reads and validates the `.srt` file
 2. For each pair of consecutive subtitles:
    - If gap < `--min-gap` → splits the gap evenly (closes small gaps)
-   - If gap ≥ `--min-gap` → extends current subtitle up to `--extend-end-max`, pulls next one back by `--extend-start`
+   - If gap ≥ `--min-gap` → extends current subtitle up to `--extend-sub-end`, pulls next one back by `--extend-sub-start`
 3. Prevents any overlap by enforcing a tiny 10 ms safety gap
 4. Add `--extend-final-sub` to the last subtitle for a precise ending
 5. Writes the result (or just reports changes in dry-run)
