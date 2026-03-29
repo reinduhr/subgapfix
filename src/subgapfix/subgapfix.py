@@ -2,6 +2,7 @@ from pathlib import Path
 import srt
 from datetime import timedelta
 import typer
+from .submerge.submerge import merge_sentences
 
 
 app = typer.Typer(
@@ -41,6 +42,20 @@ def validate_parameters(extend_start: float, min_gap: float, extend_final_sub: f
     if extend_final_sub < 0:
         typer.secho(
             f"Error: --extend-final-sub must be greater than or equal to 0",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
+    
+
+def validate_language(lang: str) -> None:
+    """Validate that the language is supported."""
+    supported = {"en", "nl"}
+    lang_lower = lang.lower().strip()
+    
+    if lang_lower not in supported:
+        typer.secho(
+            f"Error: Language '{lang}' is not supported. Use 'en' or 'nl'.",
             fg=typer.colors.RED,
             err=True,
         )
@@ -132,7 +147,22 @@ def main(
         "--extend-final-sub",
         "-efs",
         help="Seconds to add to the very last subtitle"
-    )
+    ),
+
+    submerge: bool = typer.Option(
+        False,
+        "--submerge",
+        "-sm",
+        help="Merge subtitles that belong to the same sentence before fixing gaps",
+    ),
+
+    lang: str = typer.Option(
+        "en",
+        "--lang",
+        "-l",
+        help="Language for sentence detection (en or nl)",
+        case_sensitive=False,
+    ),
 ):
     
     validate_input_file(input_file)
@@ -145,6 +175,10 @@ def main(
     validate_parameters(extend_start, min_gap, extend_final_sub)
 
     subs = load_subtitles(input_file)
+    
+    if submerge:
+        lang_str = lang if isinstance(lang, str) else "en"
+        subs = merge_sentences(subs, lang=lang_str)
 
     changes = extend_gaps(subs, extend_start, extend_end_max, min_gap, extend_final_sub)
 
@@ -159,5 +193,29 @@ def main(
     )
 
 
+# ====================== QUICK LOCAL TEST ======================
+def quick_test():
+    """Quick test function - easy to run during development"""
+    test_file = "data/transcription/input.srt"        # ← Put your test .srt file here
+    output_file = "test_merged_fixed.srt"
+
+    print(f"Testing subgapfix with submerge on: {test_file}")
+
+    # Simulate running main with -sm flag
+    main(
+        input_file=Path(test_file),
+        output=Path(output_file),
+        submerge=True,             # Enable sentence merging
+        dry_run=False,
+        extend_start=0.5,
+        extend_end_max=2.0,
+        min_gap=1.0,
+        extend_final_sub=1.0,
+    )
+
+    print("✅ Test finished!")
+
+
 if __name__ == "__main__":
     app()
+    #quick_test()
