@@ -2,7 +2,7 @@ from pathlib import Path
 import srt
 from datetime import timedelta
 import typer
-from submerge.submerge import merge_sentences
+from .submerge.submerge import merge_sentences
 
 
 app = typer.Typer(
