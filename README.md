@@ -105,6 +105,18 @@ much easier.
 Yes, I agree.
 ```
 
+**After** (merging sentences):
+
+```
+1
+00:00:01,837 --> 00:00:03,873
+SubGapFix makes our lives much easier.
+
+2
+00:00:03,883 --> 00:00:04,679
+Yes, I agree.
+```
+
 ## 💡 Why SubGapFix?
 
 Modern speech-to-text tools often prioritize transcription accuracy over comfortable reading speed.  
