@@ -15,6 +15,7 @@ It works great with transcriptions from **[WhisperX](https://github.com/m-bain/w
 - Dry-run mode to preview changes without writing files
 - Creates output folders automatically if needed
 - Only processes valid `.srt` files
+- Option to merge subtitles when a sentence is spanning over multiple subtitles (supported languages: English, Dutch)
 
 ## 📦 Installation
 
@@ -42,6 +43,9 @@ subgapfix input.srt --dry-run
 
 # Customize timings
 subgapfix input.srt --extend-sub-start 0.8 --extend-sub-end 3.0 --min-gap 1.5 --extend-final-sub 4.5
+
+# Merge sentences (default language: en)
+subgapfix input.srt --submerge --lang nl
 ```
 
 ## ⚙️ All Options
@@ -55,7 +59,9 @@ subgapfix input.srt --extend-sub-start 0.8 --extend-sub-end 3.0 --min-gap 1.5 --
 | `--min-gap`, `-mg` | `1.0` | Only apply extension if gap is at least this long (seconds) |
 | `--dry-run` | `false` | Show how many pairs would change — no file written |
 | `--extend-final-sub`, `-efs` | `1.0` | Number of seconds to add to the last subtitle |
-| `--help` | — | Show full help and exit |
+| `--submerge`, `-sm` | `false` | Merge subtitles creating full sentences |
+| `--lang`, `-l` | `en` | Set language in order to merge sentences correctly |
+| `--help, -help` | — | Show full help and exit |
 
 ## How It Works
 
