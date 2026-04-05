@@ -4,6 +4,7 @@ dist/
 
 src/subgapfix.egg-info/
 **/__pycache__/
+**.json
+**.md
 
 pyproject.toml
-src/subgapfix/__pycache__/

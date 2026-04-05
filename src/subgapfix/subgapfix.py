@@ -1,8 +1,15 @@
+from typing import Dict
+import json
 from pathlib import Path
 import srt
 from datetime import timedelta
 import typer
-from .submerge.submerge import merge_sentences
+from .fixsubtitle.submerge import merge_sentences_json
+from .fixsubtitle.subsplit import split_sub_by_sentences
+from .fixsentence.restoration.punctuation import add_punctuation
+from .fixsentence.refinement.cleanup import cleanup_segments
+from .fixsentence.refinement.grammar import polish_with_llm
+from .helpers import convert_to_srt_subtitles, debug_save_json, two_subtitles_to_one
 
 
 app = typer.Typer(
@@ -12,10 +19,10 @@ app = typer.Typer(
 
 
 def validate_input_file(input_file: Path) -> None:
-    """Check if the input is a valid .srt file."""
-    if input_file.suffix.lower() != ".srt":
+    """Check if the input is a valid .json file."""
+    if input_file.suffix.lower() != ".json":
         typer.secho(
-            f"Error: Input file must have .srt extension (got: {input_file.name})",
+            f"Error: Input file must have .json extension (got: {input_file.name})",
             fg=typer.colors.RED,
             err=True,
         )
@@ -23,9 +30,15 @@ def validate_input_file(input_file: Path) -> None:
 
 
 def prepare_output_path(input_file: Path, output: Path | None) -> Path:
-    """Determine output path — use default if not provided."""
+    """Determine output path — ensure it always ends in .srt."""
     if output is None:
-        return input_file.with_stem(input_file.stem + "_fixed")
+        # Changes "file.json" to "file_fixed.srt"
+        return input_file.with_stem(input_file.stem + "_fixed").with_suffix(".srt")
+    
+    # Even if a custom output path is provided, ensure it has the .srt suffix
+    if output.suffix.lower() != ".srt":
+        return output.with_suffix(".srt")
+        
     return output
 
 
@@ -71,6 +84,16 @@ def load_subtitles(input_file: Path) -> list[srt.Subtitle]:
         typer.secho(f"Cannot parse SRT: {e}", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
 
+
+def load_whisperx_json(input_file_json: Path) -> Dict:
+    """Reads the WhisperX JSON export and returns the dictionary."""
+    try:
+        with open(input_file_json, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        typer.secho(f"Error reading JSON: {e}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+    
 
 def extend_gaps(
     subs: list[srt.Subtitle],
@@ -121,6 +144,17 @@ def main(
     
     input_file: Path = typer.Argument(..., exists=True, dir_okay=False),
     
+    # input_file_json: Path = typer.Option(
+    #     None,
+    #     "--input-json",
+    #     "-ij",
+    #     exists=True,          # Ensure the file exists
+    #     file_okay=True,       # Must be a file, not a folder
+    #     dir_okay=False,       # Reject directories
+    #     readable=True,        # Must have permissions to read
+    #     help="Input file: whisperx json with word level timestamps"
+    # ),
+    
     output: Path = typer.Option(
         None,
         "--output",
@@ -149,11 +183,18 @@ def main(
         help="Seconds to add to the very last subtitle"
     ),
 
-    submerge: bool = typer.Option(
+    fixsubs: bool = typer.Option(
         False,
-        "--submerge",
-        "-sm",
-        help="Merge subtitles that belong to the same sentence before fixing gaps",
+        "--fixsubs",
+        "-fs",
+        help="Merge and split subtitles to create one sentence per subtitle",
+    ),
+
+    fixsubs_withllm: bool = typer.Option(
+        False,
+        "--fixsubs-llm",
+        "-fsl",
+        help="Merge and split subtitles to create one sentence per subtitle",
     ),
 
     lang: str = typer.Option(
@@ -162,6 +203,13 @@ def main(
         "-l",
         help="Language for sentence detection (en or nl)",
         case_sensitive=False,
+    ),
+
+    two_to_one: bool = typer.Option(
+        False,
+        "--two-to-one",
+        "-tto",
+        help="Combine two short subtitles into one",
     ),
 ):
     
@@ -174,18 +222,42 @@ def main(
 
     validate_parameters(extend_start, min_gap, extend_final_sub)
 
-    subs = load_subtitles(input_file)
+    data = load_whisperx_json(input_file)
+
+    # Extract subtitles (segments)
+    segments = data if isinstance(data, list) else data.get("segments", [])
     
-    if submerge:
+    if not segments:
+        typer.secho("Error: No segments found in JSON", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    
+    if fixsubs:
         lang_str = lang if isinstance(lang, str) else "en"
-        subs = merge_sentences(subs, lang=lang_str)
+        merged_segments, merge_map = merge_sentences_json(segments, lang=lang_str)
+        #debug_save_json(merged_segments)
+        merged_segments = cleanup_segments(merged_segments)
+    else:
+        merged_segments = segments
+
+    if fixsubs_withllm:
+        merged_segments = polish_with_llm(merged_segments)
+
+    if fixsubs:
+        merged_segments = add_punctuation(merged_segments)
+        final_dict_segments = split_sub_by_sentences(merged_segments, lang=lang)
+
+    subs = convert_to_srt_subtitles(final_dict_segments)
+
+    if two_to_one:
+        subs = two_subtitles_to_one(subs)
 
     changes = extend_gaps(subs, extend_start, extend_end_max, min_gap, extend_final_sub)
 
     if dry_run:
-        typer.echo(f"The dry run ran succesfully and detected {changes} changes to subtitle pairs.")
+        typer.echo(f"Dry run completed. Would have made {changes} gap changes.")
         return
 
+    # Save final SRT
     output_path.write_text(srt.compose(subs), encoding="utf-8")
     typer.secho(
         f"Done. Wrote {len(subs)} subtitles → {output_path}",
@@ -196,21 +268,23 @@ def main(
 # ====================== QUICK LOCAL TEST ======================
 def quick_test():
     """Quick test function - easy to run during development"""
-    test_file = "data/transcription/input.srt"        # ← Put your test .srt file here
-    output_file = "test_merged_fixed.srt"
+    test_file = "data/transcription/test/input/rancourt.json"        # ← Put your test .srt file here
+    json_file = "data/transcription/test/input/rancourt.json"
+    output_file = "data/transcription/test/output/test_merged_fixed.srt"
 
-    print(f"Testing subgapfix with submerge on: {test_file}")
+    print(f"Testing subgapfix with: {test_file}")
 
     # Simulate running main with -sm flag
     main(
         input_file=Path(test_file),
+        #input_file_json=Path(json_file),
         output=Path(output_file),
-        submerge=True,             # Enable sentence merging
+        submerge=False,             # Enable sentence merging
         dry_run=False,
-        extend_start=0.5,
-        extend_end_max=2.0,
-        min_gap=1.0,
-        extend_final_sub=1.0,
+        #extend_start=0.5,
+        #extend_end_max=2.0,
+        #min_gap=1.0,
+        #extend_final_sub=1.0,
     )
 
     print("✅ Test finished!")

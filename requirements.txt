@@ -1,2 +1,6 @@
-srt
-typer
+srt==3.5.3
+typer==0.24.1
+spacy[cuda13x]==3.8.14
+spacy-transformers==1.4.0
+deepmultilingualpunctuation==1.0.1
+ollama==0.6.1
